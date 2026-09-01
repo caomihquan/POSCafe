@@ -1,0 +1,7 @@
+{
+  "eventType": "InventoryReserved.v1",
+  "schemaId": "inventory-reserved.v1",
+  "compatibility": "backward",
+  "requiredHeaders": ["event-id", "event-type", "correlation-id", "schema-version"],
+  "schemaVersion": "1"
+}

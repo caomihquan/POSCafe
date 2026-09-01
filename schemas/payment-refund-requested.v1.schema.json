@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poscafe://events/payment-refund-requested.v1",
+  "title": "PaymentRefundRequested.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["SagaId", "PaymentId", "OrderId", "Amount", "OccurredAt"],
+  "properties": {
+    "SagaId": { "type": "string", "format": "uuid" },
+    "PaymentId": { "type": "string", "format": "uuid" },
+    "OrderId": { "type": "string", "format": "uuid" },
+    "Amount": { "type": "number", "exclusiveMinimum": 0 },
+    "OccurredAt": { "type": "string", "format": "date-time" }
+  }
+}

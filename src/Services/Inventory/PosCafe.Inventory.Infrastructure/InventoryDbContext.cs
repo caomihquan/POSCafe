@@ -8,6 +8,7 @@ namespace PosCafe.Inventory.Infrastructure;
 public sealed class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : DbContext(options)
 {
     public DbSet<StockItem> StockItems => Set<StockItem>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<InventoryIdempotencyRecord> InventoryIdempotencyRecords => Set<InventoryIdempotencyRecord>();
@@ -28,6 +29,15 @@ public sealed class InventoryDbContext(DbContextOptions<InventoryDbContext> opti
             entity.HasKey(x => new { x.EventId, x.Consumer });
             entity.Property(x => x.Consumer).HasMaxLength(200).IsRequired();
             entity.HasIndex(x => new { x.ProcessedOnUtc, x.LastAttemptOnUtc });
+        });
+        modelBuilder.Entity<OutboxMessage>(entity =>
+        {
+            entity.ToTable("outbox_messages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).HasMaxLength(250).IsRequired();
+            entity.Property(x => x.AggregateId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Payload).IsRequired();
+            entity.HasIndex(x => new { x.ProcessedOnUtc, x.DeadLetteredOnUtc, x.LockedUntilUtc, x.OccurredOnUtc });
         });
         modelBuilder.Entity<AuditEntry>(entity =>
         {

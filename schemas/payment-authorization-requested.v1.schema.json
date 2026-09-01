@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poscafe://events/payment-authorization-requested.v1",
+  "title": "PaymentAuthorizationRequested.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["SagaId", "OrderId", "Amount", "Method", "OccurredAt"],
+  "properties": {
+    "SagaId": { "type": "string", "format": "uuid" },
+    "OrderId": { "type": "string", "format": "uuid" },
+    "Amount": { "type": "number", "exclusiveMinimum": 0 },
+    "Method": { "type": "string", "minLength": 1 },
+    "OccurredAt": { "type": "string", "format": "date-time" }
+  }
+}

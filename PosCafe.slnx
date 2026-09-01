@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/BuildingBlocks/">
+    <Project Path="BuildingBlocks/BuildingBlocks/BuildingBlocks.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/PosCafe.AppHost/PosCafe.AppHost.csproj" />
     <Project Path="src/PosCafe.ServiceDefaults/PosCafe.ServiceDefaults.csproj" />

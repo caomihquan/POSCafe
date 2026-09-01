@@ -3,6 +3,7 @@ using BuildingBlocks.Messaging;
 using Microsoft.EntityFrameworkCore;
 using PosCafe.Inventory.Domain;
 using PosCafe.Inventory.Infrastructure;
+using PosCafe.Inventory.Infrastructure.Messaging;
 using PosCafe.ServiceDefaults;
 using BuildingBlocks.Observability;
 using System.Diagnostics;
@@ -24,10 +25,18 @@ builder.Services.Configure<InventoryMessagingOptions>(options =>
     options.BootstrapServers = builder.Configuration.GetConnectionString("kafka") ?? options.BootstrapServers;
     options.DeadLetterTopic = string.IsNullOrWhiteSpace(options.DeadLetterTopic) ? "pos.inventory.order-events.dlq" : options.DeadLetterTopic;
 });
+builder.Services.Configure<OutboxOptions>(options =>
+{
+    builder.Configuration.GetSection("Outbox:Inventory").Bind(options);
+    options.Topic = string.IsNullOrWhiteSpace(options.Topic) ? "pos.inventory.events" : options.Topic;
+    options.DeadLetterTopic = string.IsNullOrWhiteSpace(options.DeadLetterTopic) ? "pos.inventory.events.dlq" : options.DeadLetterTopic;
+    options.BootstrapServers = builder.Configuration.GetConnectionString("kafka") ?? options.BootstrapServers;
+});
 builder.Services.AddSingleton<IProducer<string, string>>(sp => new ProducerBuilder<string, string>(KafkaProducerConfiguration.Create(sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<IConfiguration>().GetConnectionString("kafka") ?? "localhost:9092")).Build());
 builder.Services.AddHostedService<KafkaProducerShutdownService>();
 builder.Services.AddSingleton<IAdminClient>(sp => { var configuration = sp.GetRequiredService<IConfiguration>(); var config = new AdminClientConfig { BootstrapServers = configuration.GetConnectionString("kafka") ?? "localhost:9092" }; KafkaProducerConfiguration.ApplySecurity(config, configuration.GetSection("Kafka:Security")); return new AdminClientBuilder(config).Build(); });
 builder.Services.AddHostedService<InventoryOrderEventsConsumer>();
+builder.Services.AddHostedService<InventoryOutboxPublisher>();
 builder.Services.AddHealthChecks().AddDbContextCheck<InventoryDbContext>("inventory-db", tags: ["ready"]).AddCheck<KafkaTopicHealthCheck>("kafka-topics", tags: ["ready"]).AddCheck<KafkaConsumerLagHealthCheck>("consumer-lag", tags: ["ready"]);
 
 var app = builder.Build();

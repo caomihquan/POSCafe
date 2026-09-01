@@ -213,6 +213,67 @@ namespace PosCafe.Order.Infrastructure.Persistence.Migrations
                     b.ToTable("order_lines", (string)null);
                 });
 
+            modelBuilder.Entity("PosCafe.Order.Infrastructure.Persistence.OrderFulfillmentSaga", b =>
+                {
+                    b.Property<Guid>("SagaId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("InventoryReservationFailed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("InventoryReserved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("PaymentAuthorized")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("PaymentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("PaymentRefundRequested")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SagaId");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "UpdatedAtUtc");
+
+                    b.ToTable("order_fulfillment_sagas", (string)null);
+                });
+
             modelBuilder.Entity("PosCafe.Order.Infrastructure.Persistence.OrderIdempotencyRecord", b =>
                 {
                     b.Property<Guid>("Id")

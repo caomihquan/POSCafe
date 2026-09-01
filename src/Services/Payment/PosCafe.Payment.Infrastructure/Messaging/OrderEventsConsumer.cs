@@ -69,7 +69,8 @@ public sealed class OrderEventsConsumer(IServiceScopeFactory scopeFactory, IProd
                     attempt = await InboxProcessor.RegisterAttemptAsync(db, eventId, "payment.order-events.v1", stoppingToken);
                     await using var transaction = await db.Database.BeginTransactionAsync(stoppingToken);
                     var eventType = result.Message.Headers.FirstOrDefault(x => x.Key == "event-type") is { } typeHeader ? Encoding.UTF8.GetString(typeHeader.GetValueBytes()) : string.Empty;
-                    await new OrderEventHandler().HandleAsync(db, eventId, "payment.order-events.v1", eventType, result.Message.Value, stoppingToken);
+                    var correlationId = result.Message.Headers.FirstOrDefault(x => x.Key == "correlation-id") is { } correlationHeader ? Encoding.UTF8.GetString(correlationHeader.GetValueBytes()) : null;
+                    await new OrderEventHandler().HandleAsync(db, eventId, "payment.order-events.v1", eventType, result.Message.Value, stoppingToken, correlationId);
                     logger.LogInformation("Processed order event {EventId} for Payment", eventId);
                     await transaction.CommitAsync(stoppingToken);
                     consumer.Commit(result);

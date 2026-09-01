@@ -13,6 +13,7 @@ public sealed class DlqManagementService(IProducer<string, string> producer, str
         new("pos.order.events.dlq", "pos.order.events", "order", ["manager", "order-operator"]),
         new("pos.payment.order-events.dlq", "pos.order.events", "payment", ["manager", "payment-operator"]),
         new("pos.inventory.order-events.dlq", "pos.order.events", "inventory", ["store-manager", "inventory-manager"]),
+        new("pos.inventory.events.dlq", "pos.inventory.events", "inventory", ["manager", "inventory-manager"]),
         new("pos.reporting.order-events.dlq", "pos.order.events", "reporting", ["manager"])
     ];
 

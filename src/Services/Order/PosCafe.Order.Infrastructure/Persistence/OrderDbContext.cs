@@ -13,6 +13,7 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<OrderIdempotencyRecord> OrderIdempotencyRecords => Set<OrderIdempotencyRecord>();
+    public DbSet<OrderFulfillmentSaga> OrderFulfillmentSagas => Set<OrderFulfillmentSaga>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,6 +68,17 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Subtotal).HasPrecision(18, 2);
             entity.HasIndex(x => x.IdempotencyKey).IsUnique();
+        });
+        modelBuilder.Entity<OrderFulfillmentSaga>(entity =>
+        {
+            entity.ToTable("order_fulfillment_sagas");
+            entity.HasKey(x => x.SagaId);
+            entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Total).HasPrecision(18, 2);
+            entity.Property(x => x.LastError).HasMaxLength(1000);
+            entity.HasIndex(x => x.OrderId).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.UpdatedAtUtc });
         });
     }
 }

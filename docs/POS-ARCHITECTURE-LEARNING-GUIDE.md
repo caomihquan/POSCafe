@@ -11,7 +11,7 @@
 - Hiểu cách một thay đổi đi từ code đến production an toàn.
 - Hình thành cách đặt câu hỏi của một senior khi thiết kế hoặc review feature.
 
-Tài liệu bám theo code hiện tại. Chỗ nào repository chưa có Orchestrator, payment gateway thật, backup platform hoặc managed Kafka thì tài liệu sẽ nói rõ, không giả định rằng nó đã được triển khai.
+Tài liệu bám theo code hiện tại. Repository đã có Saga Orchestrator tối thiểu cho flow Order-Payment-Inventory; các phần chưa có như payment gateway thật, backup platform hoặc managed Kafka sẽ được ghi rõ, không giả định rằng chúng đã được triển khai.
 
 ## Mục lục học nhanh
 
@@ -40,8 +40,8 @@ Repository là một .NET 10 solution tổ chức theo service boundary:
 | src/PosCafe.ServiceDefaults/ | Health, OpenTelemetry, rate limit, service discovery và middleware dùng chung |
 | src/Gateway/PosCafe.ApiGateway/ | YARP Gateway, JWT validation, operations và DLQ replay |
 | src/Services/Order/ | Order bounded context |
-| src/Services/Payment/ | Payment bounded context và consumer Order event |
-| src/Services/Inventory/ | Inventory bounded context và consumer Order event |
+| src/Services/Payment/ | Payment bounded context và consumer Order/Saga command |
+| src/Services/Inventory/ | Inventory bounded context, Saga command consumer và Outbox |
 | src/Services/Reporting/ | MongoDB read model và consumer reporting |
 | src/Services/Catalog/ | Category/Product |
 | src/Services/Store/ | Store và store scope |
@@ -384,7 +384,9 @@ Các topic hiện có trong config:
     "RequiredTopics": [
       "pos.order.events",
       "pos.payment.events",
-      "pos.payment.order-events.dlq"
+      "pos.payment.order-events.dlq",
+      "pos.inventory.events",
+      "pos.order.fulfillment-saga.dlq"
     ],
     "MinimumTopicPartitions": 1
   },
@@ -399,7 +401,7 @@ Các topic hiện có trong config:
 }
 ~~~
 
-File nguồn: src/Services/Payment/PosCafe.Payment.Api/appsettings.json.
+File nguồn: src/Services/Payment/PosCafe.Payment.Api/appsettings.json và src/Services/Order/PosCafe.Order.Api/appsettings.json.
 
 ## 3.2. Partition và ordering
 
@@ -429,6 +431,7 @@ Payment và Inventory đều đọc pos.order.events nhưng dùng group khác nh
 pos-payment-order-events-v1
 pos-inventory-order-events-v1
 pos-reporting-order-events-v1
+pos-order-fulfillment-saga-v1 (đọc nhiều topic)
 ~~~
 
 Kết quả:
@@ -765,53 +768,65 @@ Gateway có DLQ management tại:
 
 Replay hiện có authorization, Idempotency-Key, lease/fencing, history trong opsdb và audit.
 
-## 3.10. Saga choreography
+Inventory outcome DLQ `pos.inventory.events.dlq` đã có route replay về `pos.inventory.events`. Saga DLQ có thể chứa message đến từ nhiều input topic, nên phase cơ bản mới giữ metadata `original-topic`; cần bổ sung replay route động trước khi vận hành như một capability production.
 
-Saga là business transaction kéo dài qua nhiều service. Choreography nghĩa là không có coordinator trung tâm; service lắng nghe event và phát event tiếp theo.
+## 3.10. Saga Orchestrator cơ bản
 
-Flow khái niệm:
+Saga là business transaction kéo dài qua nhiều service. Orchestrator giữ trạng thái tiến trình và phát command tiếp theo; nó không mở một transaction xuyên nhiều database.
+
+Implementation hiện tại nằm trong `src/Services/Order/PosCafe.Order.Infrastructure/Messaging/OrderFulfillmentSagaOrchestrator.cs`. Đây là process manager tối thiểu, chạy trong Order API và lưu state vào bảng `order_fulfillment_sagas`.
+
+Flow thành công:
 
 ~~~mermaid
 sequenceDiagram
     participant O as Order
+    participant S as Saga Orchestrator
     participant K as Kafka
     participant P as Payment
     participant I as Inventory
     participant R as Reporting
 
     O->>O: Confirm aggregate
-    O->>K: OrderConfirmed
-    K->>P: Consume in payment group
-    K->>I: Consume in inventory group
-    K->>R: Consume in reporting group
-    P->>P: Create/update payment projection
-    I->>I: Reserve stock
-    R->>R: Upsert daily sales
+    O->>K: OrderConfirmed.v1
+    K->>S: Start saga + persist state
+    S->>K: PaymentAuthorizationRequested.v1
+    S->>K: InventoryReservationRequested.v1
+    K->>P: Payment command
+    K->>I: Inventory command
+    P->>K: PaymentAuthorized.v1
+    I->>K: InventoryReserved.v1
+    K->>S: Apply both outcomes
+    S->>S: Status = Completed
+    K->>R: OrderConfirmed.v1 projection
 ~~~
 
-Failure không rollback như database transaction:
+Flow thất bại và compensation:
 
 ~~~mermaid
 flowchart TD
-    OC[OrderConfirmed] --> P[Payment]
-    OC --> I[Inventory]
-    P -->|success| PA[Payment authorized]
-    I -->|success| IR[Inventory reserved]
-    P -->|failure| PF[Payment failed]
-    I -->|failure| IF[Stock unavailable]
-    PF --> RC[Refund/cancel compensation]
-    IF --> RI[Release/cancel compensation]
-    RC --> E[Audit + alert]
-    RI --> E
+    A[OrderConfirmed] --> S[Start Saga]
+    S --> P[Authorize Payment]
+    S --> I[Reserve Inventory]
+    I -->|success| IR[InventoryReserved]
+    I -->|stock thiếu| IF[InventoryReservationFailed]
+    IF --> C{Payment đã authorize?}
+    C -->|chưa| F[Status = Failed]
+    C -->|rồi| RF[PaymentRefundRequested]
+    RF --> R[PaymentRefunded]
+    R --> F
+    P -->|success| PA[PaymentAuthorized]
+    PA --> D{Inventory đã reserve?}
+    D -->|có| OK[Status = Completed]
+    D -->|chưa| W[Chờ outcome còn lại]
+    IR --> D
 ~~~
 
-Repository hiện có choreography và consumer/projection; chưa có Saga Orchestrator hoặc persistent Saga state machine riêng. Đây là giới hạn phải biết khi đọc code. Nếu sau này flow cần timeout, status tổng hợp, manual intervention hoặc compensation nhiều bước, cần cân nhắc orchestrator.
+Các message command dùng `pos.order.events` để tận dụng Order Outbox. Payment đọc command trong consumer group hiện có; Inventory chỉ xử lý `InventoryReservationRequested.v1` và bỏ qua `OrderConfirmed.v1` để tránh reserve hai lần. Inventory phát outcome qua `pos.inventory.events` bằng Outbox riêng.
 
-Compensation không phải “undo SQL”. Ví dụ:
+Các trạng thái Saga cơ bản: `Started`, `PaymentAuthorized`, `InventoryReserved`, `Completed`, `Compensating`, `Failed`. Order aggregate vẫn là source of truth cho Order; Saga state chỉ mô tả tiến trình liên service.
 
-- Payment đã authorize nhưng Inventory fail -> refund payment.
-- Inventory đã reserve nhưng Payment fail -> release stock.
-- Refund cũng fail -> giữ trạng thái cần operator xử lý, không retry vô hạn mù.
+Compensation không phải “undo SQL”. Trong code hiện tại mới có nhánh Payment refund khi Inventory thất bại. Chưa có timeout scheduler, payment provider thật, release inventory khi Payment thất bại, manual intervention UI hoặc orchestrator riêng thành executable. Đây là giới hạn cần nói rõ khi mở rộng production.
 
 ---
 
@@ -838,7 +853,12 @@ outbox_messages
 inbox_messages
 audit_entries
 order_idempotency_records
+order_fulfillment_sagas
 ~~~
+
+`order_fulfillment_sagas` lưu tiến trình Order-Payment-Inventory để Orchestrator có thể restart mà không mất trạng thái. Đây không phải bảng thay thế cho Order aggregate.
+
+Inventory cũng có `outbox_messages` sau khi nhận `InventoryReservationRequested.v1`; publisher tại `src/Services/Inventory/PosCafe.Inventory.Infrastructure/Messaging/InventoryOutboxPublisher.cs` phát `InventoryReserved.v1` hoặc `InventoryReservationFailed.v1`.
 
 Mỗi service sở hữu database của mình. Không join trực tiếp bảng Order từ Payment. Payment nhận Order event và tạo PaymentOrderProjection.
 
@@ -1422,40 +1442,25 @@ Publisher claim message. Nếu Kafka down:
 
 Nếu Kafka publish success nhưng process crash trước mark processed, message có thể gửi lại. Đây là lý do consumer cần Inbox.
 
-## Bước 6: Payment consumer
+## Bước 6: Saga Orchestrator
 
-Payment đọc event với group payment:
+Orchestrator đọc các topic `pos.order.events`, `pos.payment.events` và `pos.inventory.events` bằng group `pos-order-fulfillment-saga-v1`:
 
-- Validate schema-version.
-- Validate event-id.
-- Tạo Activity consumer từ traceparent.
-- Register Inbox attempt.
-- OrderEventHandler TryStart.
-- Upsert PaymentOrderProjection.
-- Mark Inbox processed.
-- Commit transaction.
-- Commit Kafka offset.
+- Khi nhận `OrderConfirmed.v1`, tạo Saga state trong Order PostgreSQL.
+- Ghi hai command vào Order Outbox trong cùng transaction state.
+- Theo dõi `PaymentAuthorized.v1` và `InventoryReserved.v1`.
+- Khi cả hai thành công, đổi Saga thành `Completed`.
+- Khi Inventory báo thiếu stock sau khi Payment đã authorize, ghi `PaymentRefundRequested.v1` để bù trừ.
 
-Nếu projection transaction fail, offset không commit, consumer retry.
+File chính: `src/Services/Order/PosCafe.Order.Infrastructure/Messaging/OrderFulfillmentSagaOrchestrator.cs`.
 
-## Bước 7: Inventory consumer
+Có thể xem tiến trình bằng `GET /api/v1/orders/{id}/fulfillment` với quyền `order-operator`. Endpoint này chỉ đọc Saga state; nó không ép workflow chạy đồng bộ.
 
-Inventory đọc cùng event trong group riêng:
+## Bước 7: Payment và Inventory saga consumers
 
-- Validate headers/schema.
-- Register attempt.
-- Transaction.
-- TryStart Inbox.
-- Tìm StockItem cho từng line.
-- Reserve quantity.
-- Save, mark processed, commit offset.
+Payment vẫn đọc `pos.order.events`, nhưng `OrderEventHandler` phân biệt `OrderConfirmed.v1`, `PaymentAuthorizationRequested.v1` và `PaymentRefundRequested.v1`. Payment tạo/authorize hoặc refund trong transaction Payment, ghi domain event vào Payment Outbox, rồi publisher phát sang `pos.payment.events`.
 
-Nếu thiếu stock:
-
-- Không commit offset trong lần retry.
-- Sau max attempts, publish inventory DLQ.
-- Mark Inbox dead-lettered.
-- Operator xử lý hoặc compensation theo business policy.
+Inventory chỉ xử lý `InventoryReservationRequested.v1`. Nó reserve toàn bộ line trong một transaction, ghi Inbox và outcome vào Inventory Outbox. Vì vậy nếu thiếu stock, Inventory phát `InventoryReservationFailed.v1` thay vì retry vô hạn một lỗi nghiệp vụ.
 
 ## Bước 8: Reporting consumer
 
@@ -1605,7 +1610,8 @@ Senior không chỉ hỏi “code chạy chưa”. Senior hỏi “khi Kafka ch�
 - **Replay**: đưa lại event đã cô lập vào flow có kiểm soát.
 - **Idempotency**: gọi lại cùng request không tạo side effect mới.
 - **Saga**: business transaction dài qua service, hoàn tất bằng event/compensation.
-- **Choreography**: Saga không có coordinator trung tâm.
+- **Choreography**: Saga không có coordinator trung tâm; các service tự phản ứng với event.
+- **Orchestrator**: thành phần giữ Saga state và quyết định command tiếp theo.
 - **Compensation**: action nghiệp vụ ngược lại, không phải rollback SQL.
 - **Eventual consistency**: các model hội tụ sau một khoảng trễ.
 - **Projection**: model/read view được xây dựng từ event.
@@ -1659,10 +1665,19 @@ Senior không chỉ hỏi “code chạy chưa”. Senior hỏi “khi Kafka ch�
 - BuildingBlocks/BuildingBlocks/Messaging/KafkaDeadLetter.cs
 - BuildingBlocks/BuildingBlocks/Messaging/MessagingMetrics.cs
 - src/Services/Order/PosCafe.Order.Infrastructure/Messaging/OrderOutboxPublisher.cs
+- src/Services/Order/PosCafe.Order.Infrastructure/Messaging/OrderFulfillmentSagaOrchestrator.cs
+- src/Services/Order/PosCafe.Order.Infrastructure/Persistence/OrderFulfillmentSaga.cs
 - src/Services/Payment/PosCafe.Payment.Infrastructure/Messaging/OrderEventsConsumer.cs
 - src/Services/Payment/PosCafe.Payment.Infrastructure/Messaging/OrderEventHandler.cs
 - src/Services/Inventory/PosCafe.Inventory.Infrastructure/InventoryOrderEventsConsumer.cs
+- src/Services/Inventory/PosCafe.Inventory.Infrastructure/Messaging/InventoryOutboxPublisher.cs
 - src/Services/Reporting/PosCafe.Reporting.Infrastructure/ReportingOrderEventsConsumer.cs
+- BuildingBlocks/BuildingBlocks/Messaging/OrderFulfillmentSagaMessages.cs
+- schemas/payment-authorization-requested.v1.schema.json
+- schemas/payment-refund-requested.v1.schema.json
+- schemas/inventory-reservation-requested.v1.schema.json
+- schemas/inventory-reserved.v1.schema.json
+- schemas/inventory-reservation-failed.v1.schema.json
 
 ## Gateway và operations
 
@@ -1963,34 +1978,21 @@ payment_order_projections
 
 Gọi Create Payment quá sớm có thể nhận “Order projection is not available yet.” Client nên retry có backoff hoặc hiển thị “đang đồng bộ”, không query chéo Order database.
 
-## A.5. Inventory xử lý event
+## A.5. Inventory xử lý Saga command
 
-Inventory đọc cùng topic nhưng group khác:
+Inventory đọc `pos.order.events` bằng group `pos-inventory-order-events-v1`, nhưng chỉ xử lý `InventoryReservationRequested.v1`; `OrderConfirmed.v1` được Reporting và Payment dùng cho projection, không còn được Inventory reserve trực tiếp.
 
 1. Validate event-type, schema-id, schema-version và event-id.
-2. Register attempt.
-3. Deserialize OrderConfirmed.
-4. Mở transaction.
-5. TryStart Inbox.
-6. Load StockItem theo StoreId + ProductId.
-7. Gọi StockItem.Reserve(quantity).
-8. Save stock và mark Inbox processed.
-9. Commit database.
-10. Commit Kafka offset.
+2. Register attempt trong Inbox.
+3. Deserialize `InventoryReservationRequested`.
+4. Mở transaction và TryStart Inbox.
+5. Load StockItem theo StoreId + ProductId.
+6. Gọi `StockItem.Reserve(quantity)` cho toàn bộ line.
+7. Ghi `InventoryReserved.v1` vào Inventory Outbox cùng transaction.
+8. Mark Inbox processed, commit database rồi commit Kafka offset.
+9. `InventoryOutboxPublisher` phát outcome sang `pos.inventory.events`.
 
-Nếu stock không đủ:
-
-~~~text
-attempt < max:
-  không commit offset
-  exponential backoff
-  Kafka giao lại message
-
-attempt >= max:
-  publish pos.inventory.order-events.dlq
-  mark Inbox dead-lettered
-  commit source offset
-~~~
+Nếu stock không đủ, đây là lỗi nghiệp vụ có thể dự đoán: Inventory ghi `InventoryReservationFailed.v1` vào Outbox, mark Inbox processed và commit offset. Orchestrator nhận failure; nếu Payment đã authorize, nó phát `PaymentRefundRequested.v1`. Lỗi kỹ thuật hoặc payload hỏng vẫn đi theo retry/DLQ.
 
 Reserve nhiều line phải nằm trong cùng transaction Inventory để không reserve một phần rồi fail phần còn lại. Nếu cần gọi external warehouse, không giữ database transaction trong suốt network call; phải thiết kế state và compensation.
 
@@ -2213,7 +2215,7 @@ Compose là baseline một host, không tự thành HA khi chạy nhiều contai
 ## Chưa nên coi là production capability hoàn chỉnh
 
 - Payment provider thật và webhook reconciliation.
-- Saga Orchestrator/state machine trung tâm.
+- Saga Orchestrator production hoàn chỉnh với timeout scheduler, manual intervention và durable retry policy.
 - Managed HA PostgreSQL/Mongo/Kafka.
 - Multi-region failover.
 - Backup/restore drill tự động.
@@ -3387,5 +3389,3 @@ Bạn chỉ nên nói đã hiểu deployment khi có thể trả lời:
 8. Rollback sau migration có an toàn không?
 9. Alert nào báo lỗi?
 10. Runbook đầu tiên cần mở là file nào?
-
-

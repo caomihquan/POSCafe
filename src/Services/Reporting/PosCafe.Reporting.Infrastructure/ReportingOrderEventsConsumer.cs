@@ -52,9 +52,15 @@ public sealed class ReportingOrderEventsConsumer(MongoReportingRepository reposi
                 RecordLag(consumer, message, "reporting", options.Value.InputTopic);
                 var idHeader = message.Message.Headers.FirstOrDefault(x => x.Key == "event-id");
                 var typeHeader = message.Message.Headers.FirstOrDefault(x => x.Key == "event-type");
+                var eventType = typeHeader is null ? string.Empty : Encoding.UTF8.GetString(typeHeader.GetValueBytes());
+                if (eventType != "OrderConfirmed.v1")
+                {
+                    consumer.Commit(message);
+                    continue;
+                }
                 var schemaHeader = message.Message.Headers.FirstOrDefault(x => x.Key == "schema-version");
                 var schemaIdHeader = message.Message.Headers.FirstOrDefault(x => x.Key == "schema-id");
-                if (idHeader is null || typeHeader is null || schemaHeader is null || schemaIdHeader is null || Encoding.UTF8.GetString(schemaHeader.GetValueBytes()) != "1" || Encoding.UTF8.GetString(schemaIdHeader.GetValueBytes()) != "order-confirmed.v1" || Encoding.UTF8.GetString(typeHeader.GetValueBytes()) != "OrderConfirmed.v1" || !Guid.TryParse(Encoding.UTF8.GetString(idHeader.GetValueBytes()), out var eventId))
+                if (idHeader is null || typeHeader is null || schemaHeader is null || schemaIdHeader is null || Encoding.UTF8.GetString(schemaHeader.GetValueBytes()) != "1" || Encoding.UTF8.GetString(schemaIdHeader.GetValueBytes()) != "order-confirmed.v1" || !Guid.TryParse(Encoding.UTF8.GetString(idHeader.GetValueBytes()), out var eventId))
                 {
                     await producer.ProduceAsync(settings.DeadLetterTopic, KafkaDeadLetter.Create(message, "reporting", "Missing or unsupported event headers."), stoppingToken);
                     MessagingMetrics.DeadLettered.Add(1, new KeyValuePair<string, object?>("service", "reporting"));

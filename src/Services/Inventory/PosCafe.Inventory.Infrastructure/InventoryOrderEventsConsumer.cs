@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using BuildingBlocks.Exceptions;
 using BuildingBlocks.Messaging;
 using Confluent.Kafka;
 using Microsoft.EntityFrameworkCore;
@@ -53,11 +54,17 @@ public sealed class InventoryOrderEventsConsumer(IServiceScopeFactory scopeFacto
             {
                 var result = consumer.Consume(stoppingToken);
                 RecordLag(consumer, result, "inventory", options.Value.InputTopic);
-                var idHeader = result.Message.Headers.FirstOrDefault(x => x.Key == "event-id");
                 var typeHeader = result.Message.Headers.FirstOrDefault(x => x.Key == "event-type");
+                var eventType = typeHeader is null ? string.Empty : Encoding.UTF8.GetString(typeHeader.GetValueBytes());
+                if (eventType != OrderFulfillmentSagaEventTypes.InventoryReservationRequested)
+                {
+                    consumer.Commit(result);
+                    continue;
+                }
+                var idHeader = result.Message.Headers.FirstOrDefault(x => x.Key == "event-id");
                 var schemaHeader = result.Message.Headers.FirstOrDefault(x => x.Key == "schema-version");
                 var schemaIdHeader = result.Message.Headers.FirstOrDefault(x => x.Key == "schema-id");
-                if (idHeader is null || typeHeader is null || schemaHeader is null || schemaIdHeader is null || Encoding.UTF8.GetString(schemaHeader.GetValueBytes()) != "1" || Encoding.UTF8.GetString(schemaIdHeader.GetValueBytes()) != "order-confirmed.v1" || Encoding.UTF8.GetString(typeHeader.GetValueBytes()) != "OrderConfirmed.v1")
+                if (idHeader is null || typeHeader is null || schemaHeader is null || schemaIdHeader is null || Encoding.UTF8.GetString(schemaHeader.GetValueBytes()) != "1" || Encoding.UTF8.GetString(schemaIdHeader.GetValueBytes()) != "inventory-reservation-requested.v1")
                 {
                     await producer.ProduceAsync(settings.DeadLetterTopic, KafkaDeadLetter.Create(result, "inventory", "Missing or unsupported event headers."), stoppingToken);
                     MessagingMetrics.DeadLettered.Add(1, new KeyValuePair<string, object?>("service", "inventory"));
@@ -74,6 +81,7 @@ public sealed class InventoryOrderEventsConsumer(IServiceScopeFactory scopeFacto
                     continue;
                 }
                 var attempt = 0;
+                InventoryReservationRequested? requested = null;
                 try
                 {
                     var traceparent = result.Message.Headers.FirstOrDefault(x => x.Key == "traceparent") is { } traceHeader ? Encoding.UTF8.GetString(traceHeader.GetValueBytes()) : null;
@@ -82,8 +90,8 @@ public sealed class InventoryOrderEventsConsumer(IServiceScopeFactory scopeFacto
                     using var scope = scopeFactory.CreateScope();
                     var db = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
                     attempt = await InboxProcessor.RegisterAttemptAsync(db, eventId, "inventory.order-events.v1", stoppingToken);
-                    IntegrationPayloadValidator.Validate("OrderConfirmed.v1", result.Message.Value);
-                    var confirmed = JsonSerializer.Deserialize<OrderConfirmedEvent>(result.Message.Value) ?? throw new InvalidOperationException("OrderConfirmed payload is invalid.");
+                    IntegrationPayloadValidator.Validate(eventType, result.Message.Value);
+                    requested = JsonSerializer.Deserialize<InventoryReservationRequested>(result.Message.Value) ?? throw new InvalidOperationException("InventoryReservationRequested payload is invalid.");
                     await using var transaction = await db.Database.BeginTransactionAsync(stoppingToken);
                     if (!await InboxProcessor.TryStartAsync(db, eventId, "inventory.order-events.v1", stoppingToken))
                     {
@@ -91,11 +99,18 @@ public sealed class InventoryOrderEventsConsumer(IServiceScopeFactory scopeFacto
                         consumer.Commit(result);
                         continue;
                     }
-                    foreach (var line in confirmed.Lines)
+                    foreach (var line in requested.Lines)
                     {
-                        var stock = await db.StockItems.SingleOrDefaultAsync(x => x.StoreId == confirmed.StoreId && x.ProductId == line.ProductId, stoppingToken) ?? throw new InvalidOperationException($"Stock is not configured for product {line.ProductId}.");
+                        var stock = await db.StockItems.SingleOrDefaultAsync(x => x.StoreId == requested.StoreId && x.ProductId == line.ProductId, stoppingToken) ?? throw new InvalidOperationException($"Stock is not configured for product {line.ProductId}.");
                         stock.Reserve(line.Quantity);
                     }
+                    var correlationId = result.Message.Headers.FirstOrDefault(x => x.Key == "correlation-id") is { } correlationHeader ? Encoding.UTF8.GetString(correlationHeader.GetValueBytes()) : eventId.ToString("N");
+                    db.OutboxMessages.Add(new OutboxMessage
+                    {
+                        Id = Guid.NewGuid(), AggregateId = requested.OrderId.ToString(), EventType = OrderFulfillmentSagaEventTypes.InventoryReserved,
+                        Payload = JsonSerializer.Serialize(new InventoryReserved(requested.SagaId, requested.OrderId, requested.StoreId, DateTimeOffset.UtcNow)),
+                        OccurredOnUtc = DateTime.UtcNow, CorrelationId = correlationId
+                    });
                     await db.SaveChangesAsync(stoppingToken);
                     await InboxProcessor.MarkProcessedAsync(db, eventId, "inventory.order-events.v1", stoppingToken);
                     await transaction.CommitAsync(stoppingToken);
@@ -103,7 +118,13 @@ public sealed class InventoryOrderEventsConsumer(IServiceScopeFactory scopeFacto
                 }
                 catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
                 {
-                    if (attempt >= Math.Max(1, settings.ConsumerMaxAttempts) && !string.IsNullOrWhiteSpace(settings.DeadLetterTopic))
+                    var correlationId = result.Message.Headers.FirstOrDefault(x => x.Key == "correlation-id") is { } correlationHeader ? Encoding.UTF8.GetString(correlationHeader.GetValueBytes()) : eventId.ToString("N");
+                    if (requested is not null && (exception is ConflictException or InvalidOperationException))
+                    {
+                        await SaveReservationFailureAsync(requested, eventId, correlationId, exception.Message, stoppingToken);
+                        consumer.Commit(result);
+                    }
+                    else if (attempt >= Math.Max(1, settings.ConsumerMaxAttempts) && !string.IsNullOrWhiteSpace(settings.DeadLetterTopic))
                     {
                         var headers = new Headers();
                         foreach (var header in result.Message.Headers)
@@ -134,6 +155,21 @@ public sealed class InventoryOrderEventsConsumer(IServiceScopeFactory scopeFacto
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
         catch (Exception exception) { logger.LogError(exception, "Inventory order-event consumer stopped unexpectedly"); throw; }
         finally { consumer.Close(); }
+    }
+
+    private async Task SaveReservationFailureAsync(InventoryReservationRequested request, Guid eventId, string correlationId, string reason, CancellationToken cancellationToken)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            Id = Guid.NewGuid(), AggregateId = request.OrderId.ToString(), EventType = OrderFulfillmentSagaEventTypes.InventoryReservationFailed,
+            Payload = JsonSerializer.Serialize(new InventoryReservationFailed(request.SagaId, request.OrderId, request.StoreId, reason, DateTimeOffset.UtcNow)),
+            OccurredOnUtc = DateTime.UtcNow, CorrelationId = correlationId
+        });
+        await InboxProcessor.MarkProcessedAsync(db, eventId, "inventory.order-events.v1", cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static void RecordLag(IConsumer<string, string> consumer, ConsumeResult<string, string> result, string service, string topic)

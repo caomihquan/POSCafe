@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poscafe://events/inventory-reserved.v1",
+  "title": "InventoryReserved.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["SagaId", "OrderId", "StoreId", "OccurredAt"],
+  "properties": {
+    "SagaId": { "type": "string", "format": "uuid" },
+    "OrderId": { "type": "string", "format": "uuid" },
+    "StoreId": { "type": "string", "format": "uuid" },
+    "OccurredAt": { "type": "string", "format": "date-time" }
+  }
+}

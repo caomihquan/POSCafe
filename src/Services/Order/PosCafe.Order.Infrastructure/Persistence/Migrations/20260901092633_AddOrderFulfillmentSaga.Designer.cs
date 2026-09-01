@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using PosCafe.Inventory.Infrastructure;
+using PosCafe.Order.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace PosCafe.Inventory.Infrastructure.Migrations
+namespace PosCafe.Order.Infrastructure.Persistence.Migrations
 {
-    [DbContext(typeof(InventoryDbContext))]
-    partial class InventoryDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(OrderDbContext))]
+    [Migration("20260901092633_AddOrderFulfillmentSaga")]
+    partial class AddOrderFulfillmentSaga
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -143,31 +146,35 @@ namespace PosCafe.Inventory.Infrastructure.Migrations
 
                     b.HasIndex("StoreId", "OccurredAtUtc");
 
+                    b.HasIndex("EntityType", "EntityId", "OccurredAtUtc");
+
                     b.ToTable("audit_entries", (string)null);
                 });
 
-            modelBuilder.Entity("PosCafe.Inventory.Domain.StockItem", b =>
+            modelBuilder.Entity("PosCafe.Order.Domain.Order", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
-                    b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
+                    b.Property<DateTimeOffset?>("ConfirmedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal>("ReservedQuantity")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<Guid>("StoreId")
                         .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
@@ -175,13 +182,102 @@ namespace PosCafe.Inventory.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("StoreId", "ProductId")
-                        .IsUnique();
-
-                    b.ToTable("stock_items", (string)null);
+                    b.ToTable("orders", (string)null);
                 });
 
-            modelBuilder.Entity("PosCafe.Inventory.Infrastructure.InventoryIdempotencyRecord", b =>
+            modelBuilder.Entity("PosCafe.Order.Domain.OrderLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("order_lines", (string)null);
+                });
+
+            modelBuilder.Entity("PosCafe.Order.Infrastructure.Persistence.OrderFulfillmentSaga", b =>
+                {
+                    b.Property<Guid>("SagaId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("InventoryReservationFailed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("InventoryReserved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("PaymentAuthorized")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("PaymentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("PaymentRefundRequested")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SagaId");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "UpdatedAtUtc");
+
+                    b.ToTable("order_fulfillment_sagas", (string)null);
+                });
+
+            modelBuilder.Entity("PosCafe.Order.Infrastructure.Persistence.OrderIdempotencyRecord", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -195,21 +291,43 @@ namespace PosCafe.Inventory.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RequestHash")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<string>("ResponseJson")
+                    b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
 
-                    b.ToTable("inventory_idempotency_records", (string)null);
+                    b.ToTable("order_idempotency_records", (string)null);
+                });
+
+            modelBuilder.Entity("PosCafe.Order.Domain.OrderLine", b =>
+                {
+                    b.HasOne("PosCafe.Order.Domain.Order", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PosCafe.Order.Domain.Order", b =>
+                {
+                    b.Navigation("Lines");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,0 +1,7 @@
+{
+  "eventType": "PaymentRefundRequested.v1",
+  "schemaId": "payment-refund-requested.v1",
+  "compatibility": "backward",
+  "requiredHeaders": ["event-id", "event-type", "correlation-id", "schema-version"],
+  "schemaVersion": "1"
+}

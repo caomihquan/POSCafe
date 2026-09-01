@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poscafe://events/inventory-reservation-failed.v1",
+  "title": "InventoryReservationFailed.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["SagaId", "OrderId", "StoreId", "Reason", "OccurredAt"],
+  "properties": {
+    "SagaId": { "type": "string", "format": "uuid" },
+    "OrderId": { "type": "string", "format": "uuid" },
+    "StoreId": { "type": "string", "format": "uuid" },
+    "Reason": { "type": "string", "minLength": 1 },
+    "OccurredAt": { "type": "string", "format": "date-time" }
+  }
+}

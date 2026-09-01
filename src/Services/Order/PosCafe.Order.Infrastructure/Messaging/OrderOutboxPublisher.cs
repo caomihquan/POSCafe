@@ -59,7 +59,22 @@ public sealed class OrderOutboxPublisher(
                 activity?.SetTag("messaging.message.id", message.Id);
                 activity?.SetTag("messaging.destination.partition.key", message.AggregateId);
                 var schemaId = IntegrationSchemaIds.ForEventType(message.EventType);
-                await producer.ProduceAsync(options.Value.Topic, new Message<string, string> { Key = message.AggregateId, Value = message.Payload, Headers = new Headers { { "event-type", System.Text.Encoding.UTF8.GetBytes(message.EventType) }, { "event-id", System.Text.Encoding.UTF8.GetBytes(message.Id.ToString()) }, { "correlation-id", System.Text.Encoding.UTF8.GetBytes(message.CorrelationId ?? message.Id.ToString("N")) }, { "causation-id", System.Text.Encoding.UTF8.GetBytes(message.Id.ToString()) }, { "traceparent", System.Text.Encoding.UTF8.GetBytes(activity?.Id ?? string.Empty) }, { "schema-version", System.Text.Encoding.UTF8.GetBytes("1") }, { "schema-id", System.Text.Encoding.UTF8.GetBytes(schemaId) } } }, cancellationToken);
+                await producer.ProduceAsync(options.Value.Topic, 
+                new Message<string, string> 
+                { 
+                    Key = message.AggregateId, 
+                    Value = message.Payload, 
+                    Headers = new Headers 
+                    { 
+                        { "event-type", System.Text.Encoding.UTF8.GetBytes(message.EventType) }, 
+                        { "event-id", System.Text.Encoding.UTF8.GetBytes(message.Id.ToString()) }, 
+                        { "correlation-id", System.Text.Encoding.UTF8.GetBytes(message.CorrelationId ?? message.Id.ToString("N")) }, 
+                        { "causation-id", System.Text.Encoding.UTF8.GetBytes(message.Id.ToString()) }, 
+                        { "traceparent", System.Text.Encoding.UTF8.GetBytes(activity?.Id ?? string.Empty) }, 
+                        { "schema-version", System.Text.Encoding.UTF8.GetBytes("1") }, 
+                        { "schema-id", System.Text.Encoding.UTF8.GetBytes(schemaId) } 
+                    } 
+                }, cancellationToken);
                 message.ProcessedOnUtc = DateTime.UtcNow;
                 message.LockedUntilUtc = null;
                 message.Error = null;

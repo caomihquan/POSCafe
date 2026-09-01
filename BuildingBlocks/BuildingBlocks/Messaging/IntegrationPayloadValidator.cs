@@ -27,6 +27,20 @@ public static class IntegrationPayloadValidator
             case "PaymentAuthorized.v1":
             case "PaymentRefunded.v1":
                 RequireGuid(root, "PaymentId"); RequireGuid(root, "OrderId"); RequirePositiveNumber(root, "Amount"); RequireTimestamp(root, "OccurredAt"); break;
+            case "PaymentAuthorizationRequested.v1":
+                RequireGuid(root, "SagaId"); RequireGuid(root, "OrderId"); RequirePositiveNumber(root, "Amount"); RequireText(root, "Method"); RequireTimestamp(root, "OccurredAt"); break;
+            case "PaymentRefundRequested.v1":
+                RequireGuid(root, "SagaId"); RequireGuid(root, "PaymentId"); RequireGuid(root, "OrderId"); RequirePositiveNumber(root, "Amount"); RequireTimestamp(root, "OccurredAt"); break;
+            case "InventoryReservationRequested.v1":
+                RequireGuid(root, "SagaId"); RequireGuid(root, "OrderId"); RequireGuid(root, "StoreId"); RequirePositiveNumber(root, "Total"); RequireTimestamp(root, "OccurredAt");
+                if (!root.TryGetProperty("Lines", out var requestedLines) || requestedLines.ValueKind != JsonValueKind.Array || requestedLines.GetArrayLength() == 0)
+                    throw new InvalidOperationException("InventoryReservationRequested.v1 requires at least one line.");
+                foreach (var line in requestedLines.EnumerateArray()) { RequireGuid(line, "ProductId"); RequirePositiveNumber(line, "Quantity"); }
+                break;
+            case "InventoryReserved.v1":
+                RequireGuid(root, "SagaId"); RequireGuid(root, "OrderId"); RequireGuid(root, "StoreId"); RequireTimestamp(root, "OccurredAt"); break;
+            case "InventoryReservationFailed.v1":
+                RequireGuid(root, "SagaId"); RequireGuid(root, "OrderId"); RequireGuid(root, "StoreId"); RequireText(root, "Reason"); RequireTimestamp(root, "OccurredAt"); break;
             default: throw new InvalidOperationException($"No runtime validator registered for event type '{eventType}'.");
         }
     }

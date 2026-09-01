@@ -25,6 +25,14 @@ builder.Services.AddSingleton<IProducer<string, string>>(sp => new ProducerBuild
 builder.Services.AddHostedService<KafkaProducerShutdownService>();
 builder.Services.AddSingleton<IAdminClient>(sp => { var configuration = sp.GetRequiredService<IConfiguration>(); var config = new AdminClientConfig { BootstrapServers = configuration.GetConnectionString("kafka") ?? "localhost:9092" }; KafkaProducerConfiguration.ApplySecurity(config, configuration.GetSection("Kafka:Security")); return new AdminClientBuilder(config).Build(); });
 builder.Services.AddHostedService<OrderOutboxPublisher>();
+builder.Services.Configure<SagaMessagingOptions>(options =>
+{
+    builder.Configuration.GetSection("Saga:OrderFulfillment").Bind(options);
+    options.BootstrapServers = builder.Configuration.GetConnectionString("kafka") ?? options.BootstrapServers;
+    options.InputTopics = options.InputTopics.Length == 0 ? ["pos.order.events", "pos.payment.events", "pos.inventory.events"] : options.InputTopics;
+    options.DeadLetterTopic = string.IsNullOrWhiteSpace(options.DeadLetterTopic) ? "pos.order.fulfillment-saga.dlq" : options.DeadLetterTopic;
+});
+builder.Services.AddHostedService<OrderFulfillmentSagaOrchestrator>();
 builder.Services.Configure<AuditRetentionOptions>(builder.Configuration.GetSection("Audit"));
 builder.Services.AddSingleton(sp => new AuditArchiveClient(new AuditArchiveOptions { Enabled = sp.GetRequiredService<IConfiguration>().GetValue("Audit:Archive:Enabled", false), ConnectionString = sp.GetRequiredService<IConfiguration>().GetConnectionString("auditarchive") ?? sp.GetRequiredService<IConfiguration>()["Audit:Archive:ConnectionString"] ?? string.Empty, ContainerName = sp.GetRequiredService<IConfiguration>()["Audit:Archive:ContainerName"] ?? "audit-archive", ServiceName = "order" }));
 builder.Services.AddHostedService<PosCafe.Order.Infrastructure.AuditRetentionService>();
@@ -72,6 +80,20 @@ app.MapGet("/api/v1/orders/{id:guid}", async (Guid id, OrderDbContext db, System
     if (order is not null && !principal.CanAccessStore(order.StoreId)) return Results.Forbid();
     return order is null ? Results.NotFound() : Results.Ok(OrderResponse.From(order));
 });
+
+app.MapGet("/api/v1/orders/{id:guid}/fulfillment", async (Guid id, OrderDbContext db, System.Security.Claims.ClaimsPrincipal principal, CancellationToken ct) =>
+{
+    var order = await db.Orders.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+    if (order is null) return Results.NotFound();
+    if (!principal.CanAccessStore(order.StoreId)) return Results.Forbid();
+    var saga = await db.OrderFulfillmentSagas.AsNoTracking().SingleOrDefaultAsync(x => x.OrderId == id, ct);
+    return saga is null ? Results.NotFound("Order fulfillment saga has not started yet.") : Results.Ok(new
+    {
+        saga.SagaId, saga.OrderId, saga.Status, saga.PaymentAuthorized, saga.InventoryReserved,
+        saga.InventoryReservationFailed, saga.PaymentRefundRequested, saga.PaymentId, saga.LastError,
+        saga.CreatedAtUtc, saga.UpdatedAtUtc
+    });
+}).RequireAuthorization("order-operator");
 
 app.MapGet("/api/v1/orders", async (Guid storeId, string? status, int? limit, OrderDbContext db, System.Security.Claims.ClaimsPrincipal principal, CancellationToken ct) =>
 {

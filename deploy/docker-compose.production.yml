@@ -63,8 +63,10 @@ services:
       kafka: { condition: service_healthy }
     entrypoint: ["/bin/sh", "-c"]
     command: >-
-      for topic in pos.order.events pos.order.events.dlq pos.payment.events
-      pos.payment.order-events.dlq pos.inventory.order-events.dlq
+      for topic in pos.order.events pos.order.events.dlq
+      pos.order.fulfillment-saga.dlq pos.payment.events
+      pos.payment.order-events.dlq pos.inventory.events
+      pos.inventory.events.dlq pos.inventory.order-events.dlq
       pos.reporting.order-events.dlq; do
       if ! rpk topic describe "$${topic}" --brokers kafka:9092 >/dev/null 2>&1; then
       rpk topic create "$${topic}" --brokers kafka:9092 --partitions 1;
