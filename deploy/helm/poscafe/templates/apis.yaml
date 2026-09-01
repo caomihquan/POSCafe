@@ -1,0 +1,48 @@
+{{- range .Values.services }}
+{{- $service := . }}
+{{- $root := $ }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "poscafe.fullname" $root }}-{{ $service.name }}
+  labels: { app.kubernetes.io/name: {{ $service.name }}, app.kubernetes.io/part-of: poscafe }
+spec:
+  replicas: {{ $root.Values.replicaCount }}
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app.kubernetes.io/name: {{ $service.name }} } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: {{ $service.name }} } }
+    spec:
+      serviceAccountName: {{ default (include "poscafe.fullname" $root) $root.Values.serviceAccount.name }}
+      terminationGracePeriodSeconds: 30
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: {{ $service.name }}
+          image: {{ $root.Values.image.repository }}/poscafe-{{ $service.name }}:{{ $root.Values.image.tag }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: {{ $root.Values.configMap.name }} } }]
+          {{- if $service.dbKey }}
+          env:
+            - name: ConnectionStrings__{{ $service.dbEnv }}
+              valueFrom: { secretKeyRef: { name: {{ $root.Values.secrets.name }}, key: {{ $service.dbKey }} } }
+            - name: Jwt__Key
+              valueFrom: { secretKeyRef: { name: {{ $root.Values.secrets.name }}, key: JWT_KEY } }
+            {{- if $service.internalApiKey }}
+            - name: Reporting__InternalApiKeys__0
+              valueFrom: { secretKeyRef: { name: {{ $root.Values.secrets.name }}, key: {{ $service.internalApiKey }} } }
+            {{- end }}
+          {{- end }}
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: {{- toYaml $root.Values.resources | nindent 12 }}
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: {{ $service.name }} }
+spec:
+  selector: { app.kubernetes.io/name: {{ $service.name }} }
+  ports: [{ name: http, port: 80, targetPort: http }]
+{{- end }}

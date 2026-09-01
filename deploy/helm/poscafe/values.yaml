@@ -1,0 +1,48 @@
+image:
+  repository: ghcr.io/example
+  tag: replace-me
+  pullPolicy: IfNotPresent
+replicaCount: 2
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+serviceAccount:
+  create: true
+  name: ""
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: 1000m, memory: 512Mi }
+secrets:
+  name: poscafe-secrets
+configMap:
+  name: poscafe-runtime
+services:
+  - { name: gateway, dbKey: OPSDB_CONNECTION_STRING, dbEnv: opsdb }
+  - { name: order, dbKey: ORDERDB_CONNECTION_STRING, dbEnv: orderdb, kafka: true }
+  - { name: payment, dbKey: PAYMENTDB_CONNECTION_STRING, dbEnv: paymentdb, kafka: true }
+  - { name: inventory, dbKey: INVENTORYDB_CONNECTION_STRING, dbEnv: inventorydb, kafka: true }
+  - { name: catalog, dbKey: CATALOGDB_CONNECTION_STRING, dbEnv: catalogdb }
+  - { name: store, dbKey: STOREDB_CONNECTION_STRING, dbEnv: storedb }
+  - { name: identity, dbKey: IDENTITYDB_CONNECTION_STRING, dbEnv: identitydb }
+  - { name: reporting, dbKey: CATALOGREAD_CONNECTION_STRING, dbEnv: catalogread, internalApiKey: REPORTING_INTERNAL_API_KEY, kafka: true }
+  - { name: kitchen }
+migrations:
+  enabled: true
+  image: ghcr.io/example/poscafe-migrations:replace-me
+ingress:
+  enabled: false
+  className: nginx
+  host: poscafe.example.com
+  tlsSecretName: poscafe-tls
+externalSecret:
+  enabled: false
+  refreshInterval: 1h
+  secretStoreRef:
+    name: platform-secrets
+    kind: ClusterSecretStore
+  remoteKey: poscafe/production

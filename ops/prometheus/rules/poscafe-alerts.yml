@@ -1,0 +1,84 @@
+groups:
+  - name: poscafe.messaging
+    interval: 30s
+    rules:
+      - alert: PosCafeOutboxPublishFailures
+        expr: sum by (service) (increase(poscafe_outbox_publish_failures_total[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Outbox publishing is failing
+          description: 'Service {{ $labels.service }} has outbox publish failures in the last 10 minutes.'
+      - alert: PosCafeDeadLetterMessages
+        expr: sum by (service) (increase(poscafe_outbox_dead_lettered_total[15m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Messages entered the dead-letter flow
+          description: 'Service {{ $labels.service }} dead-lettered messages and requires replay investigation.'
+      - alert: PosCafeAuditArchiveFailures
+        expr: sum by (service) (increase(poscafe_audit_archive_failures_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Audit archive upload failed
+          description: 'Service {{ $labels.service }} could not archive audit records; purge is intentionally blocked.'
+      - alert: PosCafeAuditRetentionFailures
+        expr: sum by (service) (increase(poscafe_audit_retention_failures_total[30m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Audit retention cycle failed
+          description: 'Service {{ $labels.service }} retention worker will retry on its next cycle.'
+      - alert: PosCafeKafkaConsumerLag
+        expr: max by (service, topic) (poscafe_kafka_consumer_lag) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka consumer lag is high
+          description: 'Consumer {{ $labels.service }} for topic {{ $labels.topic }} is more than 1000 records behind.'
+      - alert: PosCafeDlqReplayRetentionFailure
+        expr: increase(poscafe_dlq_retention_failures_total[30m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: DLQ replay history retention failed
+          description: 'The Gateway could not purge expired replay history; inspect opsdb and retention logs.'
+      - alert: PosCafeGatewayAuditRetentionFailure
+        expr: increase(poscafe_audit_retention_failures_total{service="gateway"}[30m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Gateway audit retention failed
+          description: 'Gateway audit archive or purge requires operator attention; audit data is retained in opsdb.'
+      - alert: PosCafeDlqPendingReplayBacklog
+        expr: poscafe_dlq_pending > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: DLQ replay claim is pending
+          description: 'One or more DLQ replay claims have remained pending; inspect lease and Gateway health.'
+      - alert: PosCafeIdempotencyConflictSpike
+        expr: increase(poscafe_idempotency_conflicts_total[10m]) > 25
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Idempotency conflict spike
+          description: 'Clients are reusing idempotency keys with different payloads; inspect client retries and API contract drift.'
+      - alert: PosCafeIdempotencyRetentionFailure
+        expr: increase(poscafe_audit_retention_failures_total{service=~"(order|payment|inventory|catalog|identity|store)-idempotency"}[30m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Idempotency retention failed
+          description: 'An idempotency cleanup cycle failed; records will be retried on the next scheduled cycle.'

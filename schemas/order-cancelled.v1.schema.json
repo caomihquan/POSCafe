@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poscafe://events/order-cancelled.v1",
+  "title": "OrderCancelled.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["OrderId", "Reason", "OccurredAt"],
+  "properties": {
+    "OrderId": { "type": "string", "format": "uuid" },
+    "Reason": { "type": "string", "minLength": 1 },
+    "OccurredAt": { "type": "string", "format": "date-time" }
+  }
+}

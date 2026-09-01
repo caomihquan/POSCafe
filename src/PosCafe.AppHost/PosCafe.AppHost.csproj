@@ -1,0 +1,30 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.5.3">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Services\Catalog\PosCafe.Catalog.Api\PosCafe.Catalog.Api.csproj" />
+    <ProjectReference Include="..\Services\Order\PosCafe.Order.Api\PosCafe.Order.Api.csproj" />
+    <ProjectReference Include="..\Services\Payment\PosCafe.Payment.Api\PosCafe.Payment.Api.csproj" />
+    <ProjectReference Include="..\Services\Identity\PosCafe.Identity.Api\PosCafe.Identity.Api.csproj" />
+    <ProjectReference Include="..\Services\Store\PosCafe.Store.Api\PosCafe.Store.Api.csproj" />
+    <ProjectReference Include="..\Services\Inventory\PosCafe.Inventory.Api\PosCafe.Inventory.Api.csproj" />
+    <ProjectReference Include="..\Services\Kitchen\PosCafe.Kitchen.Api\PosCafe.Kitchen.Api.csproj" />
+    <ProjectReference Include="..\Services\Reporting\PosCafe.Reporting.Api\PosCafe.Reporting.Api.csproj" />
+    <ProjectReference Include="..\Gateway\PosCafe.ApiGateway\PosCafe.ApiGateway.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.5.3" />
+    <PackageReference Include="Aspire.Hosting.MongoDB" Version="13.5.3" />
+    <PackageReference Include="Aspire.Hosting.Kafka" Version="13.5.3" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+    <UserSecretsId>4c517856-bb5b-473a-a299-18a8888c975b</UserSecretsId>
+  </PropertyGroup>
+
+</Project>

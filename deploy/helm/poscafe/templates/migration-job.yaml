@@ -1,0 +1,31 @@
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "poscafe.fullname" . }}-migrations
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrator
+          image: {{ .Values.migrations.image }}
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+          env:
+            - name: POSCAFE_MIGRATION_ALLOWED
+              value: "true"
+            - name: ConnectionStrings__kafka
+              valueFrom: { secretKeyRef: { name: {{ .Values.secrets.name }}, key: KAFKA_BOOTSTRAP_SERVERS } }
+            {{- range $key := list "OPSDB_CONNECTION_STRING" "ORDERDB_CONNECTION_STRING" "PAYMENTDB_CONNECTION_STRING" "INVENTORYDB_CONNECTION_STRING" "CATALOGDB_CONNECTION_STRING" "STOREDB_CONNECTION_STRING" "IDENTITYDB_CONNECTION_STRING" }}
+            - name: ConnectionStrings__{{ lower (trimSuffix "_CONNECTION_STRING" $key) }}
+              valueFrom: { secretKeyRef: { name: {{ $.Values.secrets.name }}, key: {{ $key }} } }
+            {{- end }}
+{{- end }}

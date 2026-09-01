@@ -1,0 +1,63 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PosCafe.AppHost/PosCafe.AppHost.csproj" />
+    <Project Path="src/PosCafe.ServiceDefaults/PosCafe.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/src/Gateway/">
+    <Project Path="src/Gateway/PosCafe.ApiGateway/PosCafe.ApiGateway.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/Catalog/">
+    <Project Path="src/Services/Catalog/PosCafe.Catalog.Api/PosCafe.Catalog.Api.csproj" />
+    <Project Path="src/Services/Catalog/PosCafe.Catalog.Application/PosCafe.Catalog.Application.csproj" />
+    <Project Path="src/Services/Catalog/PosCafe.Catalog.Domain/PosCafe.Catalog.Domain.csproj" />
+    <Project Path="src/Services/Catalog/PosCafe.Catalog.Infrastructure/PosCafe.Catalog.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Identity/">
+    <Project Path="src/Services/Identity/PosCafe.Identity.Api/PosCafe.Identity.Api.csproj" />
+    <Project Path="src/Services/Identity/PosCafe.Identity.Application/PosCafe.Identity.Application.csproj" />
+    <Project Path="src/Services/Identity/PosCafe.Identity.Domain/PosCafe.Identity.Domain.csproj" />
+    <Project Path="src/Services/Identity/PosCafe.Identity.Infrastructure/PosCafe.Identity.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Inventory/">
+    <Project Path="src/Services/Inventory/PosCafe.Inventory.Api/PosCafe.Inventory.Api.csproj" />
+    <Project Path="src/Services/Inventory/PosCafe.Inventory.Application/PosCafe.Inventory.Application.csproj" />
+    <Project Path="src/Services/Inventory/PosCafe.Inventory.Domain/PosCafe.Inventory.Domain.csproj" />
+    <Project Path="src/Services/Inventory/PosCafe.Inventory.Infrastructure/PosCafe.Inventory.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Kitchen/">
+    <Project Path="src/Services/Kitchen/PosCafe.Kitchen.Api/PosCafe.Kitchen.Api.csproj" />
+    <Project Path="src/Services/Kitchen/PosCafe.Kitchen.Application/PosCafe.Kitchen.Application.csproj" />
+    <Project Path="src/Services/Kitchen/PosCafe.Kitchen.Domain/PosCafe.Kitchen.Domain.csproj" />
+    <Project Path="src/Services/Kitchen/PosCafe.Kitchen.Infrastructure/PosCafe.Kitchen.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Order/">
+    <Project Path="src/Services/Order/PosCafe.Order.Api/PosCafe.Order.Api.csproj" />
+    <Project Path="src/Services/Order/PosCafe.Order.Application/PosCafe.Order.Application.csproj" />
+    <Project Path="src/Services/Order/PosCafe.Order.Domain/PosCafe.Order.Domain.csproj" />
+    <Project Path="src/Services/Order/PosCafe.Order.Infrastructure/PosCafe.Order.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Payment/">
+    <Project Path="src/Services/Payment/PosCafe.Payment.Api/PosCafe.Payment.Api.csproj" />
+    <Project Path="src/Services/Payment/PosCafe.Payment.Application/PosCafe.Payment.Application.csproj" />
+    <Project Path="src/Services/Payment/PosCafe.Payment.Domain/PosCafe.Payment.Domain.csproj" />
+    <Project Path="src/Services/Payment/PosCafe.Payment.Infrastructure/PosCafe.Payment.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Reporting/">
+    <Project Path="src/Services/Reporting/PosCafe.Reporting.Api/PosCafe.Reporting.Api.csproj" />
+    <Project Path="src/Services/Reporting/PosCafe.Reporting.Application/PosCafe.Reporting.Application.csproj" />
+    <Project Path="src/Services/Reporting/PosCafe.Reporting.Domain/PosCafe.Reporting.Domain.csproj" />
+    <Project Path="src/Services/Reporting/PosCafe.Reporting.Infrastructure/PosCafe.Reporting.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Store/">
+    <Project Path="src/Services/Store/PosCafe.Store.Api/PosCafe.Store.Api.csproj" />
+    <Project Path="src/Services/Store/PosCafe.Store.Application/PosCafe.Store.Application.csproj" />
+    <Project Path="src/Services/Store/PosCafe.Store.Domain/PosCafe.Store.Domain.csproj" />
+    <Project Path="src/Services/Store/PosCafe.Store.Infrastructure/PosCafe.Store.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PosCafe.Order.Tests/PosCafe.Order.Tests.csproj" />
+  <Project Path="tests/PosCafe.Payment.Tests/PosCafe.Payment.Tests.csproj" />
+  <Project Path="tools/PosCafe.DlqReplay/PosCafe.DlqReplay.csproj" />
+  </Folder>
+</Solution>

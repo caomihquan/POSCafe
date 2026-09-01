@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: poscafe_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d poscafe_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      kafka:
+        image: bitnami/kafka:3.8
+        env:
+          KAFKA_CFG_NODE_ID: 1
+          KAFKA_CFG_PROCESS_ROLES: broker,controller
+          KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+          KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          ALLOW_PLAINTEXT_LISTENER: yes
+        ports: ["9092:9092"]
+    env:
+      ConnectionStrings__orderdb: Host=localhost;Database=poscafe_ci;Username=postgres;Password=postgres
+      ConnectionStrings__paymentdb: Host=localhost;Database=poscafe_ci;Username=postgres;Password=postgres
+      ConnectionStrings__kafka: localhost:9092
+      POSCAFE_POSTGRES_CONNECTION: Host=localhost;Database=poscafe_ci;Username=postgres;Password=postgres
+      POSCAFE_PAYMENT_INTEGRATION_CONNECTION: Host=localhost;Database=poscafe_integration;Username=postgres;Password=postgres
+      POSCAFE_KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Validate event schemas
+        run: python tools/validate-schemas.py
+      - run: dotnet restore PosCafe.slnx
+      - run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE DATABASE poscafe_integration;"
+      - run: dotnet build PosCafe.slnx --no-restore --configuration Release
+      - run: dotnet build tests/PosCafe.IntegrationTests/PosCafe.IntegrationTests.csproj --no-restore --configuration Release
+      - run: dotnet test PosCafe.slnx --no-build --no-restore --configuration Release --logger "trx;LogFileName=test-results.trx"
+      - run: dotnet test tests/PosCafe.IntegrationTests/PosCafe.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger "trx;LogFileName=integration-test-results.trx"

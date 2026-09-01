@@ -1,0 +1,224 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: order, labels: { app: poscafe-order, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app: poscafe-order } }
+  template:
+    metadata: { labels: { app: poscafe-order, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: order
+          image: ghcr.io/example/poscafe-order:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: ConnectionStrings__orderdb, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: ORDERDB_CONNECTION_STRING } } }
+            - { name: Jwt__Key, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: order }
+spec: { selector: { app: poscafe-order }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: payment, labels: { app: poscafe-payment, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: poscafe-payment } }
+  template:
+    metadata: { labels: { app: poscafe-payment, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: payment
+          image: ghcr.io/example/poscafe-payment:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: ConnectionStrings__paymentdb, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: PAYMENTDB_CONNECTION_STRING } } }
+            - { name: Jwt__Key, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: payment }
+spec: { selector: { app: poscafe-payment }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: inventory, labels: { app: poscafe-inventory, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: poscafe-inventory } }
+  template:
+    metadata: { labels: { app: poscafe-inventory, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: inventory
+          image: ghcr.io/example/poscafe-inventory:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: ConnectionStrings__inventorydb, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: INVENTORYDB_CONNECTION_STRING } } }
+            - { name: Jwt__Key, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: inventory }
+spec: { selector: { app: poscafe-inventory }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: catalog, labels: { app: poscafe-catalog, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: poscafe-catalog } }
+  template:
+    metadata: { labels: { app: poscafe-catalog, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: catalog
+          image: ghcr.io/example/poscafe-catalog:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: ConnectionStrings__catalogdb, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: CATALOGDB_CONNECTION_STRING } } }
+            - { name: Jwt__Key, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: catalog }
+spec: { selector: { app: poscafe-catalog }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: store, labels: { app: poscafe-store, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: poscafe-store } }
+  template:
+    metadata: { labels: { app: poscafe-store, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: store
+          image: ghcr.io/example/poscafe-store:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: ConnectionStrings__storedb, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: STOREDB_CONNECTION_STRING } } }
+            - { name: Jwt__Key, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: store }
+spec: { selector: { app: poscafe-store }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: identity, labels: { app: poscafe-identity, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: poscafe-identity } }
+  template:
+    metadata: { labels: { app: poscafe-identity, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: identity
+          image: ghcr.io/example/poscafe-identity:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: ConnectionStrings__identitydb, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: IDENTITYDB_CONNECTION_STRING } } }
+            - { name: Jwt__Key, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: identity }
+spec: { selector: { app: poscafe-identity }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: reporting, labels: { app: poscafe-reporting, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: poscafe-reporting } }
+  template:
+    metadata: { labels: { app: poscafe-reporting, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: reporting
+          image: ghcr.io/example/poscafe-reporting:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: ConnectionStrings__catalogread, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: CATALOGREAD_CONNECTION_STRING } } }
+            - { name: Reporting__InternalApiKeys__0, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: REPORTING_INTERNAL_API_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: reporting }
+spec: { selector: { app: poscafe-reporting }, ports: [{ name: http, port: 80, targetPort: http }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: kitchen, labels: { app: poscafe-kitchen, app.kubernetes.io/part-of: poscafe } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: poscafe-kitchen } }
+  template:
+    metadata: { labels: { app: poscafe-kitchen, app.kubernetes.io/part-of: poscafe } }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: kitchen
+          image: ghcr.io/example/poscafe-kitchen:replace-me
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: poscafe-runtime } }]
+          env:
+            - { name: Jwt__Key, valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } } }
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /alive, port: http }, initialDelaySeconds: 15, periodSeconds: 20 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1000m, memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, capabilities: { drop: [ALL] } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: kitchen }
+spec: { selector: { app: poscafe-kitchen }, ports: [{ name: http, port: 80, targetPort: http }] }

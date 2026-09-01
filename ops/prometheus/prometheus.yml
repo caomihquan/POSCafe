@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/poscafe-alerts.yml
+
+scrape_configs:
+  - job_name: poscafe
+    scheme: https
+    metrics_path: /metrics
+    bearer_token_file: /etc/prometheus/secrets/poscafe-admin-token
+    static_configs:
+      - targets:
+          - gateway:8080
+          - order:8080
+          - payment:8080
+          - inventory:8080
+          - catalog:8080
+          - store:8080
+          - reporting:8080
+        labels:
+          environment: production

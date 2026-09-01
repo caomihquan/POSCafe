@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poscafe://events/payment-refunded.v1",
+  "title": "PaymentRefunded.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["PaymentId", "OrderId", "Amount", "OccurredAt"],
+  "properties": {
+    "PaymentId": { "type": "string", "format": "uuid" },
+    "OrderId": { "type": "string", "format": "uuid" },
+    "Amount": { "type": "number", "exclusiveMinimum": 0 },
+    "OccurredAt": { "type": "string", "format": "date-time" }
+  }
+}

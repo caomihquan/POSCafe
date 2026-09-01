@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: poscafe-migrations
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: { app: poscafe-migrations }
+    spec:
+      restartPolicy: Never
+      serviceAccountName: poscafe-migrator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrator
+          image: ghcr.io/example/poscafe-migrations:replace-me
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSCAFE_MIGRATION_ALLOWED
+              value: "true"
+            - name: ConnectionStrings__kafka
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: KAFKA_BOOTSTRAP_SERVERS } }
+            - name: JWT_KEY
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: JWT_KEY } }
+            - name: ConnectionStrings__orderdb
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: ORDERDB_CONNECTION_STRING } }
+            - name: ConnectionStrings__paymentdb
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: PAYMENTDB_CONNECTION_STRING } }
+            - name: ConnectionStrings__inventorydb
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: INVENTORYDB_CONNECTION_STRING } }
+            - name: ConnectionStrings__catalogdb
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: CATALOGDB_CONNECTION_STRING } }
+            - name: ConnectionStrings__storedb
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: STOREDB_CONNECTION_STRING } }
+            - name: ConnectionStrings__identitydb
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: IDENTITYDB_CONNECTION_STRING } }
+            - name: ConnectionStrings__opsdb
+              valueFrom: { secretKeyRef: { name: poscafe-secrets, key: OPSDB_CONNECTION_STRING } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities: { drop: [ALL] }
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:17-alpine
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432; do sleep 2; done"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: poscafe-migrator

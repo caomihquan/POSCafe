@@ -1,0 +1,8 @@
+{
+  "eventType": "OrderCreated.v1",
+  "schemaId": "order-created.v1",
+  "compatibility": "backward",
+  "consumers": [],
+  "requiredHeaders": ["event-id", "event-type", "correlation-id", "schema-version"],
+  "schemaVersion": "1"
+}

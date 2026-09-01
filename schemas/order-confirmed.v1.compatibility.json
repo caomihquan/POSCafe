@@ -1,0 +1,9 @@
+{
+  "eventType": "OrderConfirmed.v1",
+  "schemaId": "order-confirmed.v1",
+  "compatibility": "backward",
+  "consumers": ["payment", "inventory", "reporting"],
+  "requiredHeaders": ["event-id", "event-type", "correlation-id", "schema-version"],
+  "schemaVersion": "1",
+  "policy": "Additive optional fields only within v1. Required fields, field types, and semantic meaning are immutable. Breaking changes require v2 and parallel consumer support during migration."
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "poscafe://events/order-created.v1",
+  "title": "OrderCreated.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["OrderId", "StoreId", "OccurredAt"],
+  "properties": {
+    "OrderId": { "type": "string", "format": "uuid" },
+    "StoreId": { "type": "string", "format": "uuid" },
+    "OccurredAt": { "type": "string", "format": "date-time" }
+  }
+}

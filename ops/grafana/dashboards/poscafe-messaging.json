@@ -1,0 +1,21 @@
+{
+  "uid": "poscafe-messaging",
+  "title": "PosCafe Messaging and Audit Operations",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    { "type": "timeseries", "title": "Outbox Publish Failures", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }, "targets": [{ "expr": "sum by (service) (rate(poscafe_outbox_publish_failures_total[5m]))", "legendFormat": "{{service}}" }] },
+    { "type": "timeseries", "title": "Dead-Letter Rate", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }, "targets": [{ "expr": "sum by (service) (rate(poscafe_outbox_dead_lettered_total[5m]))", "legendFormat": "{{service}}" }] },
+    { "type": "timeseries", "title": "Audit Archive Failures", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }, "targets": [{ "expr": "sum by (service) (rate(poscafe_audit_archive_failures_total[5m]))", "legendFormat": "{{service}}" }] },
+    { "type": "timeseries", "title": "Archived Audit Records", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }, "targets": [{ "expr": "sum by (service) (rate(poscafe_audit_archive_records_total[5m]))", "legendFormat": "{{service}}" }] }
+    ,{ "type": "timeseries", "title": "Kafka Consumer Lag", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }, "targets": [{ "expr": "max by (service, topic) (poscafe_kafka_consumer_lag)", "legendFormat": "{{service}} / {{topic}}" }] },
+    { "type": "timeseries", "title": "DLQ Replay Outcomes", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }, "targets": [{ "expr": "sum by (outcome) (rate(poscafe_dlq_replays_total[5m]))", "legendFormat": "{{outcome}}" }] },
+    { "type": "timeseries", "title": "Gateway Audit Archive Throughput", "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 }, "targets": [{ "expr": "sum(rate(poscafe_audit_archive_records_total{service=\"gateway\"}[5m]))", "legendFormat": "records/s" }] },
+    { "type": "timeseries", "title": "Gateway Audit Retention Failures", "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 }, "targets": [{ "expr": "increase(poscafe_audit_retention_failures_total{service=\"gateway\"}[30m])", "legendFormat": "failures" }] },
+    { "type": "timeseries", "title": "Gateway Audit Records Purged", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 }, "targets": [{ "expr": "sum by (service) (rate(poscafe_audit_retention_purged_total{service=\"gateway\"}[5m]))", "legendFormat": "{{service}} records/s" }] },
+    { "type": "timeseries", "title": "DLQ Replay State", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 }, "targets": [{ "expr": "poscafe_dlq_pending", "legendFormat": "pending" }, { "expr": "poscafe_dlq_failed", "legendFormat": "failed" }, { "expr": "poscafe_dlq_not_found", "legendFormat": "not found" }, { "expr": "poscafe_dlq_completed", "legendFormat": "completed" }] },
+    { "type": "timeseries", "title": "Idempotency Replays and Conflicts", "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 }, "targets": [{ "expr": "sum by (service) (rate(poscafe_idempotency_replays_total[5m]))", "legendFormat": "replays / {{service}}" }, { "expr": "rate(poscafe_idempotency_conflicts_total[5m])", "legendFormat": "conflicts" }] }
+  ]
+}

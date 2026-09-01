@@ -1,0 +1,66 @@
+# .NET build output
+**/bin/
+**/obj/
+**/out/
+
+# Visual Studio, Rider and VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+
+# Test and coverage output
+TestResults/
+**/TestResults/
+coverage/
+**/coverage/
+*.trx
+*.coverage
+*.coveragexml
+
+# Local logs and data stores
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+*.tmp
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+*.secrets.json
+appsettings.Local.json
+appsettings.*.local.json
+appsettings.*.secrets.json
+secrets/
+**/secrets/
+*.pfx
+*.p12
+*.key
+*.pem
+
+# Keep safe configuration templates under version control
+!**/*.example
+!**/*.sample
+!deploy/k8s/secrets.example.yaml
+
+# Local containers and Aspire state
+.aspire/
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Node-based tooling caches, if used locally
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,8 @@
+{
+  "eventType": "PaymentAuthorized.v1",
+  "schemaId": "payment-authorized.v1",
+  "compatibility": "backward",
+  "consumers": [],
+  "requiredHeaders": ["event-id", "event-type", "correlation-id", "schema-version"],
+  "schemaVersion": "1"
+}

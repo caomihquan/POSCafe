@@ -1,0 +1,246 @@
+name: poscafe
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?set MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo-init:
+    image: mongo:8
+    restart: "no"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?set MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD}
+    depends_on:
+      mongo: { condition: service_healthy }
+    entrypoint: ["sh", "-c"]
+    command: >-
+      mongosh --host mongo:27017 --username "$${MONGO_INITDB_ROOT_USERNAME}"
+      --password "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin
+      --eval "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo:27017'}]}) }"
+
+  kafka:
+    image: redpandadata/redpanda:v25.2.1
+    restart: unless-stopped
+    command: ["redpanda", "start", "--overprovisioned", "--smp", "1", "--memory", "1G", "--reserve-memory", "0M", "--check=false"]
+    volumes:
+      - kafka-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --api-urls localhost:9644"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka-init:
+    image: redpandadata/redpanda:v25.2.1
+    restart: "no"
+    depends_on:
+      kafka: { condition: service_healthy }
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      for topic in pos.order.events pos.order.events.dlq pos.payment.events
+      pos.payment.order-events.dlq pos.inventory.order-events.dlq
+      pos.reporting.order-events.dlq; do
+      if ! rpk topic describe "$${topic}" --brokers kafka:9092 >/dev/null 2>&1; then
+      rpk topic create "$${topic}" --brokers kafka:9092 --partitions 1;
+      fi;
+      done
+
+  migrator:
+    build:
+      context: ..
+      dockerfile: deploy/Migration.Dockerfile
+    restart: "no"
+    environment:
+      POSCAFE_MIGRATION_ALLOWED: "true"
+      ConnectionStrings__identitydb: ${IDENTITYDB_CONNECTION_STRING:?set IDENTITYDB_CONNECTION_STRING}
+      ConnectionStrings__storedb: ${STOREDB_CONNECTION_STRING:?set STOREDB_CONNECTION_STRING}
+      ConnectionStrings__catalogdb: ${CATALOGDB_CONNECTION_STRING:?set CATALOGDB_CONNECTION_STRING}
+      ConnectionStrings__orderdb: ${ORDERDB_CONNECTION_STRING:?set ORDERDB_CONNECTION_STRING}
+      ConnectionStrings__paymentdb: ${PAYMENTDB_CONNECTION_STRING:?set PAYMENTDB_CONNECTION_STRING}
+      ConnectionStrings__inventorydb: ${INVENTORYDB_CONNECTION_STRING:?set INVENTORYDB_CONNECTION_STRING}
+      ConnectionStrings__opsdb: ${OPSDB_CONNECTION_STRING:?set OPSDB_CONNECTION_STRING}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        PROJECT: src/Gateway/PosCafe.ApiGateway/PosCafe.ApiGateway.csproj
+        APP_DLL: PosCafe.ApiGateway.dll
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__opsdb: ${OPSDB_CONNECTION_STRING:?set OPSDB_CONNECTION_STRING}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+      ConnectionStrings__kafka: kafka:9092
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      migrator: { condition: service_completed_successfully }
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+
+  order-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        PROJECT: src/Services/Order/PosCafe.Order.Api/PosCafe.Order.Api.csproj
+        APP_DLL: PosCafe.Order.Api.dll
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__orderdb: ${ORDERDB_CONNECTION_STRING:?set ORDERDB_CONNECTION_STRING}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+      ConnectionStrings__kafka: kafka:9092
+      HealthChecks__ExposeEndpoints: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      migrator: { condition: service_completed_successfully }
+
+  payment-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { PROJECT: src/Services/Payment/PosCafe.Payment.Api/PosCafe.Payment.Api.csproj, APP_DLL: PosCafe.Payment.Api.dll }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__paymentdb: ${PAYMENTDB_CONNECTION_STRING:?set PAYMENTDB_CONNECTION_STRING}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+      ConnectionStrings__kafka: kafka:9092
+      HealthChecks__ExposeEndpoints: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      migrator: { condition: service_completed_successfully }
+
+  inventory-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { PROJECT: src/Services/Inventory/PosCafe.Inventory.Api/PosCafe.Inventory.Api.csproj, APP_DLL: PosCafe.Inventory.Api.dll }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__inventorydb: ${INVENTORYDB_CONNECTION_STRING:?set INVENTORYDB_CONNECTION_STRING}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+      ConnectionStrings__kafka: kafka:9092
+      HealthChecks__ExposeEndpoints: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      migrator: { condition: service_completed_successfully }
+
+  catalog-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { PROJECT: src/Services/Catalog/PosCafe.Catalog.Api/PosCafe.Catalog.Api.csproj, APP_DLL: PosCafe.Catalog.Api.dll }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__catalogdb: ${CATALOGDB_CONNECTION_STRING:?set CATALOGDB_CONNECTION_STRING}
+      ConnectionStrings__catalogread: ${CATALOGREAD_CONNECTION_STRING:?set CATALOGREAD_CONNECTION_STRING}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+      HealthChecks__ExposeEndpoints: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      mongo-init: { condition: service_completed_successfully }
+      migrator: { condition: service_completed_successfully }
+
+  store-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { PROJECT: src/Services/Store/PosCafe.Store.Api/PosCafe.Store.Api.csproj, APP_DLL: PosCafe.Store.Api.dll }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__storedb: ${STOREDB_CONNECTION_STRING:?set STOREDB_CONNECTION_STRING}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+      HealthChecks__ExposeEndpoints: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrator: { condition: service_completed_successfully }
+
+  identity-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { PROJECT: src/Services/Identity/PosCafe.Identity.Api/PosCafe.Identity.Api.csproj, APP_DLL: PosCafe.Identity.Api.dll }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__identitydb: ${IDENTITYDB_CONNECTION_STRING:?set IDENTITYDB_CONNECTION_STRING}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+      HealthChecks__ExposeEndpoints: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrator: { condition: service_completed_successfully }
+
+  reporting-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { PROJECT: src/Services/Reporting/PosCafe.Reporting.Api/PosCafe.Reporting.Api.csproj, APP_DLL: PosCafe.Reporting.Api.dll }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__catalogread: ${CATALOGREAD_CONNECTION_STRING:?set CATALOGREAD_CONNECTION_STRING}
+      ConnectionStrings__kafka: kafka:9092
+      Reporting__InternalApiKeys__0: ${REPORTING_INTERNAL_API_KEY:?set REPORTING_INTERNAL_API_KEY}
+      HealthChecks__ExposeEndpoints: "true"
+    depends_on:
+      mongo-init: { condition: service_completed_successfully }
+      kafka: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      migrator: { condition: service_completed_successfully }
+
+  kitchen-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args: { PROJECT: src/Services/Kitchen/PosCafe.Kitchen.Api/PosCafe.Kitchen.Api.csproj, APP_DLL: PosCafe.Kitchen.Api.dll }
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY}
+
+volumes:
+  postgres-data:
+  mongo-data:
+  kafka-data:

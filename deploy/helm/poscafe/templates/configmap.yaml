@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configMap.name }}
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__kafka: kafka-bootstrap.messaging.svc.cluster.local:9092
+  HealthChecks__ExposeEndpoints: "true"
